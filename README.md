@@ -1,7 +1,7 @@
-# 🏠 RealEstate IQ Bot
+#  RealEstate IQ Bot
 
 An AI-powered educational quiz bot for the Real Estate domain, focused on Property Listings.
-Built with **Python + Streamlit + Google Gemini API**.
+Built with **Python + Streamlit + Groq API (Llama 3.3 70B)**.
 
 ---
 
@@ -11,10 +11,11 @@ Built with **Python + Streamlit + Google Gemini API**.
 real_estate_bot/
 ├── app.py                # Streamlit UI — main entry point
 ├── question_bank.py      # 20 property listing questions across 7 topics
-├── evaluator.py          # Gemini API evaluation + retry logic
+├── evaluator.py          # Groq API evaluation + retry logic
 ├── session_manager.py    # Quiz state, scoring, progress tracking
-├── config.py             # Gemini API key setup
+├── config.py             # Groq API key setup
 ├── .env                  # Your secret API key (never commit this!)
+├── .gitignore            # Keeps .env, venv, and cache off GitHub
 ├── requirements.txt      # Python dependencies
 └── README.md
 ```
@@ -23,11 +24,11 @@ real_estate_bot/
 
 ## ⚙️ Setup Instructions (PyCharm)
 
-### Step 1 — Get Your Free Gemini API Key
-1. Go to: https://aistudio.google.com/apikey
-2. Sign in with your Google account
-3. Click **"Create API Key"**
-4. Copy the key (looks like: `AIzaSy...`)
+### Step 1 — Get Your Free Groq API Key
+1. Go to: https://console.groq.com
+2. Sign up for free — **no credit card needed**
+3. Click **API Keys → Create API Key**
+4. Copy the key (looks like: `gsk_...`)
 
 ### Step 2 — Open Project in PyCharm
 1. Open PyCharm → **File → Open** → select the `real_estate_bot` folder
@@ -44,13 +45,24 @@ real_estate_bot/
 
 ### Step 3 — Add Your API Key
 1. Open the `.env` file in PyCharm
-2. Replace `your_gemini_api_key_here` with your actual key:
+2. Replace `your_groq_api_key_here` with your actual key:
    ```
-   GEMINI_API_KEY=AIzaSyXXXXXXXXXXXXXXXXXX
+   GROQ_API_KEY=gsk_XXXXXXXXXXXXXXXXXXXX
    ```
 3. Save the file
 
-### Step 4 — Run the App
+### Step 4 — Verify the Key Works
+Before running the full app, test quickly in the terminal:
+```bash
+python -c "
+from groq import Groq
+client = Groq(api_key='gsk_your_key_here')
+r = client.chat.completions.create(model='llama-3.3-70b-versatile', messages=[{'role':'user','content':'Say hello'}])
+print('SUCCESS:', r.choices[0].message.content)
+"
+```
+
+### Step 5 — Run the App
 In the PyCharm terminal (bottom panel):
 ```bash
 streamlit run app.py
@@ -60,7 +72,7 @@ Your browser will automatically open at: **http://localhost:8501**
 
 ---
 
-## 🎮 How the App Works
+##   How the App Works
 
 ```
 Welcome Screen
@@ -69,7 +81,7 @@ Question shown (topic badge + difficulty badge)
      ↓
 User selects A/B/C/D and clicks Submit
      ↓
-Gemini AI evaluates the answer
+Groq AI (Llama 3.3 70B) evaluates the answer
      ↓
 Shows: ✅/❌ result + score + key concept + explanation + pro tip
      ↓
@@ -82,33 +94,52 @@ Retake Quiz (reshuffled)
 
 ---
 
-## ⚡ Free Tier Limits (Gemini 2.0 Flash Lite)
+## ⚡ Free Tier Limits (Groq — Llama 3.3 70B)
 
 | Limit | Value |
 |-------|-------|
-| Requests per minute | 15 |
-| Requests per day | 1,000 |
+| Requests per minute | 30 |
+| Requests per day | 14,400 |
+| Tokens per minute | 6,000 |
 | Cost | Free |
 
-Each quiz question = 1 API call. So 1,000 RPD = **50 full quizzes per day** for free.
+Each quiz question = 1 API call. So 14,400 RPD = **720 full quizzes per day** for free.
+This is ~14x more generous than Gemini's free tier was.
 
 ---
 
-## 🐛 Troubleshooting
+##   Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
-| `ValueError: Gemini API key not found` | Check your `.env` file has the real key |
-| `429 RESOURCE_EXHAUSTED` | You hit the rate limit — app will auto-retry, just wait 15s |
-| `ModuleNotFoundError` | Run `pip install -r requirements.txt` in your venv |
+| `ValueError: Groq API key not found` | Check your `.env` file has the real key starting with `gsk_` |
+| `429 rate_limit_exceeded` | Hit the RPM cap — app auto-retries, just wait 15 seconds |
+| `ModuleNotFoundError: groq` | Run `pip install groq` in your venv |
+| `ModuleNotFoundError: streamlit` | Run `pip install -r requirements.txt` in your venv |
 | App opens but shows error | Make sure you're running `streamlit run app.py`, not `python app.py` |
+| `.env` not loading | Make sure the file is named `.env` (with the dot), not `env` or `.env.txt` |
 
 ---
 
-## 🚀 Next Steps to Extend the Project
+##   Next Steps to Extend the Project
 
-- [ ] Add user login + store history in SQLite
-- [ ] Add a "Weak Topics Mode" that only quizzes low-scoring areas
-- [ ] Export results as PDF report
-- [ ] Add timer per question
-- [ ] Add image-based questions (listing photos)
+- [ ] Add topic & difficulty selector before quiz starts
+- [ ] Add countdown timer per question
+- [ ] Add "Weak Topics Re-Quiz" mode after summary
+- [ ] Store score history in SQLite database
+- [ ] Export results as a PDF report
+- [ ] Add user login for multiple users
+- [ ] Deploy on Streamlit Cloud (free, shareable via URL)
+
+---
+
+##   Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| UI | Streamlit |
+| AI Model | Llama 3.3 70B (via Groq) |
+| Language | Python 3.10+ |
+| State | Streamlit session_state |
+| Config | python-dotenv |
+| IDE | PyCharm |
