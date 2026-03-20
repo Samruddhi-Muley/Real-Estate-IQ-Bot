@@ -6,22 +6,45 @@
 
 import random
 import streamlit as st
-from question_bank import QUESTIONS
+from question_bank import QUESTIONS, TOPICS, DIFFICULTIES
 
 
 def init_session():
     """Initialize session state if starting fresh."""
     if "initialized" not in st.session_state:
         st.session_state.initialized = True
-        st.session_state.questions = random.sample(QUESTIONS, len(QUESTIONS))
+        st.session_state.selected_topics = TOPICS.copy()
+        st.session_state.selected_difficulties = DIFFICULTIES.copy()
+        st.session_state.questions = []        
         st.session_state.current_index = 0
         st.session_state.total_score = 0
-        st.session_state.history = []          # list of result dicts
-        st.session_state.topic_scores = {}     # topic -> {correct, total}
-        st.session_state.phase = "quiz"        # "quiz" | "result" | "summary"
+        st.session_state.history = []
+        st.session_state.topic_scores = {}
+        st.session_state.phase = "welcome"
         st.session_state.last_result = None
         st.session_state.answer_submitted = False
 
+def apply_filters():
+    """
+    Call this when the user clicks Start Quiz on the filter screen.
+    Filters QUESTIONS by selected topics + difficulties, shuffles, saves to session.
+    """
+    filtered = [
+        q for q in QUESTIONS
+        if q["topic"] in st.session_state.selected_topics
+        and q["difficulty"] in st.session_state.selected_difficulties
+    ]
+    if not filtered:
+        return False   # caller should show a warning
+    st.session_state.questions = random.sample(filtered, len(filtered))
+    st.session_state.current_index = 0
+    st.session_state.total_score = 0
+    st.session_state.history = []
+    st.session_state.topic_scores = {}
+    st.session_state.last_result = None
+    st.session_state.answer_submitted = False
+    return True
+    
 
 def get_current_question() -> dict | None:
     """Returns the current question or None if quiz is done."""

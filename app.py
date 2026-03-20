@@ -4,12 +4,16 @@
 # Run with:  streamlit run app.py
 # ------------------------------------------------
 
-import streamlit as st
+import streamlit as st  
+from evaluator import evaluate_answer
+
 from session_manager import (
     init_session, get_current_question, record_result,
-    advance_question, get_progress, get_final_stats, reset_quiz
+    advance_question, get_progress, get_final_stats, reset_quiz,
+    apply_filters
 )
-from evaluator import evaluate_answer
+from question_bank import TOPICS, DIFFICULTIES
+
 
 # ── PAGE CONFIG ──────────────────────────────────────────────────────────
 st.set_page_config(
@@ -151,7 +155,7 @@ def show_welcome():
 
     st.divider()
     if st.button("🚀  Start Quiz", type="primary", use_container_width=True):
-        st.session_state.phase = "quiz"
+        st.session_state.phase = "filter"
         st.rerun()
 
 
@@ -272,6 +276,53 @@ def show_result_panel(result: dict):
         st.rerun()
 
 
+def show_filter():
+    st.markdown("### 🎯 Customize Your Quiz")
+    st.markdown("Select the topics and difficulty levels you want to practice.")
+    st.divider()
+
+    # ── Topic selector ───────────────────────────────────────────────────
+    st.markdown("**📚 Topics** — pick one or more")
+    col1, col2 = st.columns(2)
+    selected_topics = []
+    for i, topic in enumerate(sorted(TOPICS)):
+        col = col1 if i % 2 == 0 else col2
+        default = topic in st.session_state.selected_topics
+        if col.checkbox(topic, value=default, key=f"topic_{topic}"):
+            selected_topics.append(topic)
+
+    st.markdown("**🎓 Difficulty** — pick one or more")
+    col1, col2, col3 = st.columns(3)
+    diff_cols = {"beginner": col1, "intermediate": col2, "advanced": col3}
+    selected_difficulties = []
+    for diff in DIFFICULTIES:
+        default = diff in st.session_state.selected_difficulties
+        if diff_cols[diff].checkbox(diff.capitalize(), value=default, key=f"diff_{diff}"):
+            selected_difficulties.append(diff)
+
+    # Live count of how many questions match
+    from question_bank import QUESTIONS
+    matching = [
+        q for q in QUESTIONS
+        if q["topic"] in selected_topics
+        and q["difficulty"] in selected_difficulties
+    ]
+    st.divider()
+    if matching:
+        st.info(f"✅ {len(matching)} question(s) match your filters.")
+    else:
+        st.error("⚠️ No questions match. Please select at least one topic and one difficulty.")
+
+    if st.button("🚀  Start Quiz", type="primary",
+                 use_container_width=True, disabled=(len(matching) == 0)):
+        st.session_state.selected_topics = selected_topics
+        st.session_state.selected_difficulties = selected_difficulties
+        success = apply_filters()
+        if success:
+            st.session_state.phase = "quiz"
+            st.rerun()
+
+
 # ════════════════════════════════════════════════════════════════════════
 # SUMMARY / RESULTS SCREEN
 # ════════════════════════════════════════════════════════════════════════
@@ -351,6 +402,8 @@ phase = st.session_state.get("phase", "welcome")
 
 if phase == "welcome":
     show_welcome()
+elif phase == "filter":          
+    show_filter()                
 elif phase in ("quiz", "result"):
     show_quiz()
 elif phase == "summary":
