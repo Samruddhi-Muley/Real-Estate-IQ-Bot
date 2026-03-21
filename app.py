@@ -14,6 +14,7 @@ from session_manager import (
 )
 from question_bank import TOPICS, DIFFICULTIES
 
+QUESTION_TIME_LIMIT = 30   # seconds per question
 
 # ── PAGE CONFIG ──────────────────────────────────────────────────────────
 st.set_page_config(
@@ -163,9 +164,9 @@ def show_welcome():
 # QUIZ SCREEN
 # ════════════════════════════════════════════════════════════════════════
 def show_quiz():
-    question = get_current_question()
+    import time
 
-    # All questions done → go to summary
+    question = get_current_question()
     if question is None:
         st.session_state.phase = "summary"
         st.rerun()
@@ -173,30 +174,69 @@ def show_quiz():
 
     progress = get_progress()
 
-    # ── Header ──────────────────────────────────────────────────────────
-    st.markdown(f"### 🏠 RealEstate IQ Bot")
+    # ── Start timer when question first loads ────────────────────────────
+    if st.session_state.question_start_time is None:
+        st.session_state.question_start_time = time.time()
+
+    # ── Calculate time remaining ─────────────────────────────────────────
+    elapsed = time.time() - st.session_state.question_start_time
+    time_remaining = max(0, QUESTION_TIME_LIMIT - int(elapsed))
+
+    # ── Header ───────────────────────────────────────────────────────────
+    st.markdown("### 🏠 RealEstate IQ Bot")
     st.progress(progress["percent"],
                 text=f"Question {progress['done'] + 1} of {progress['total']}")
 
-    # ── Badges ──────────────────────────────────────────────────────────
+    # ── Timer bar ────────────────────────────────────────────────────────
+    if not st.session_state.answer_submitted:
+        timer_ratio = time_remaining / QUESTION_TIME_LIMIT
+
+        # colour shifts green → amber → red as time runs out
+        if timer_ratio > 0.5:
+            colour = "🟢"
+        elif timer_ratio > 0.25:
+            colour = "🟡"
+        else:
+            colour = "🔴"
+
+        timer_placeholder = st.empty()
+        timer_placeholder.progress(
+            timer_ratio,
+            text=f"{colour}  {time_remaining}s remaining"
+        )
+
+    # ── Badges ───────────────────────────────────────────────────────────
     diff = question["difficulty"]
     diff_color = {"beginner": "diff-beginner",
                   "intermediate": "diff-intermediate",
                   "advanced": "diff-advanced"}.get(diff, "")
-
     st.markdown(
         f'<span class="topic-badge">{question["topic"]}</span> '
         f'<span class="topic-badge {diff_color}">{diff.capitalize()}</span>',
         unsafe_allow_html=True
     )
 
-    # ── Question Card ────────────────────────────────────────────────────
+    # ── Question card ────────────────────────────────────────────────────
     st.markdown(
-        f'<div class="question-card"><b>Q{progress["done"] + 1}.</b> {question["question"]}</div>',
+        f'<div class="question-card"><b>Q{progress["done"] + 1}.</b> '
+        f'{question["question"]}</div>',
         unsafe_allow_html=True
     )
 
-    # ── Answer Options ───────────────────────────────────────────────────
+    # ── Handle time expiry ───────────────────────────────────────────────
+    if time_remaining == 0 and not st.session_state.answer_submitted:
+        st.session_state.time_expired = True
+        # auto-submit with no answer selected
+        result = evaluate_answer(question, "X")   # "X" matches nothing → wrong
+        result["user_answer"] = "⏰ Time expired"
+        result["is_correct"] = False
+        result["score"] = 0
+        record_result(result, question)
+        st.session_state.answer_submitted = True
+        st.session_state.phase = "result"
+        st.rerun()
+
+    # ── Answer options ───────────────────────────────────────────────────
     if not st.session_state.answer_submitted:
         options = question["options"]
         chosen = st.radio(
@@ -207,12 +247,9 @@ def show_quiz():
             key=f"radio_{question['id']}"
         )
 
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            submit = st.button("✅  Submit Answer", type="primary",
-                               use_container_width=True,
-
-                               disabled=(chosen is None))
+        submit = st.button("✅  Submit Answer", type="primary",
+                           use_container_width=True,
+                           disabled=(chosen is None))
 
         if submit and chosen:
             with st.spinner("🤖 Groq AI is evaluating your answer..."):
@@ -223,10 +260,21 @@ def show_quiz():
                 st.session_state.phase = "result"
             st.rerun()
 
-    # ── Result Panel (shown after submit) ────────────────────────────────
-    if st.session_state.answer_submitted and st.session_state.last_result:
-        show_result_panel(st.session_state.last_result)
+        # ── Auto-rerun every second to update the countdown ──────────────
+        import time as t
+        t.sleep(1)
+        st.rerun()
 
+    # ── Result panel ─────────────────────────────────────────────────────
+    if st.session_state.answer_submitted and st.session_state.last_result:
+        # Show time expired warning if applicable
+        if st.session_state.time_expired:
+            st.markdown(
+                '<div class="wrong-box">⏰ <b>Time expired!</b> '
+                'You ran out of time for this question.</div>',
+                unsafe_allow_html=True
+            )
+        show_result_panel(st.session_state.last_result)
 
 # ════════════════════════════════════════════════════════════════════════
 # RESULT PANEL (inline, after answer)

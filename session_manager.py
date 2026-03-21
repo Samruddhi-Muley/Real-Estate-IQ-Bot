@@ -23,6 +23,9 @@ def init_session():
         st.session_state.phase = "welcome"
         st.session_state.last_result = None
         st.session_state.answer_submitted = False
+        #timer keys
+        st.session_state.question_start_time = None
+        st.session_state.time_expired = False
 
 def apply_filters():
     """
@@ -86,6 +89,9 @@ def advance_question():
     st.session_state.phase = "quiz"
     st.session_state.answer_submitted = False
     st.session_state.last_result = None
+    # ── NEW: reset timer for next question ───────────
+    st.session_state.question_start_time = None
+    st.session_state.time_expired = False
 
 
 def get_progress() -> dict:
