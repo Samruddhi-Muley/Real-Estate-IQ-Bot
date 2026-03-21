@@ -163,8 +163,8 @@ This is ~14x more generous than Gemini's free tier was.
 
 ## Next Steps to Extend the Project
 
-* [ ] Add countdown timer per question
-* [ ] Add "Weak Topics Re-Quiz" mode
+* [x] Add countdown timer per question
+* [x] Add "Weak Topics Re-Quiz" mode
 * [ ] Store score history in database
 * [ ] Export results as PDF
 * [ ] Add user authentication
