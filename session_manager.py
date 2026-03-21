@@ -115,6 +115,34 @@ def get_weak_topics() -> list[str]:
                 weak.append(topic)
     return weak
 
+def start_weak_topics_requiz():
+    """
+    Resets the quiz session but pre-filters questions
+    to only the topics the user scored below 60% in.
+    Called when the user clicks 'Practice Weak Topics'.
+    """
+    weak = get_weak_topics()
+
+    # Filter questions to weak topics only, all difficulties
+    filtered = [
+        q for q in QUESTIONS
+        if q["topic"] in weak
+    ]
+
+    # Reset everything except we keep topic_scores for
+    # historical reference — overwrite only quiz state
+    st.session_state.questions = random.sample(filtered, len(filtered))
+    st.session_state.current_index = 0
+    st.session_state.total_score = 0
+    st.session_state.history = []
+    st.session_state.topic_scores = {}
+    st.session_state.phase = "quiz"
+    st.session_state.last_result = None
+    st.session_state.answer_submitted = False
+    st.session_state.question_start_time = None
+    st.session_state.time_expired = False
+    st.session_state.selected_topics = weak     # reflects what's being quizzed
+    st.session_state.selected_difficulties = ["beginner", "intermediate", "advanced"]
 
 def get_final_stats() -> dict:
     """Returns aggregated stats for the summary screen."""

@@ -10,8 +10,9 @@ from evaluator import evaluate_answer
 from session_manager import (
     init_session, get_current_question, record_result,
     advance_question, get_progress, get_final_stats, reset_quiz,
-    apply_filters
+    apply_filters, start_weak_topics_requiz    # ADD start_weak_topics_requiz
 )
+
 from question_bank import TOPICS, DIFFICULTIES
 
 QUESTION_TIME_LIMIT = 30   # seconds per question
@@ -186,6 +187,10 @@ def show_quiz():
     st.markdown("### 🏠 RealEstate IQ Bot")
     st.progress(progress["percent"],
                 text=f"Question {progress['done'] + 1} of {progress['total']}")
+    # ── NEW: re-quiz mode banner ──────────────────────────────────────────
+    if len(st.session_state.selected_topics) < 7:  # not all topics = filtered
+        topics_str = ", ".join(st.session_state.selected_topics)
+        st.info(f"🎯 Re-quiz mode — practising: **{topics_str}**")
 
     # ── Timer bar ────────────────────────────────────────────────────────
     if not st.session_state.answer_submitted:
@@ -401,7 +406,6 @@ def show_summary():
     st.markdown("### 📊 Topic Breakdown")
     for topic, data in stats["topic_scores"].items():
         pct = (data["correct"] / data["total"] * 100) if data["total"] > 0 else 0
-        bar_color = "green" if pct >= 60 else "red"
         col_a, col_b = st.columns([3, 1])
         col_a.write(f"**{topic}**")
         col_b.write(f"{data['correct']}/{data['total']} ({pct:.0f}%)")
@@ -436,11 +440,48 @@ def show_summary():
             )
             st.markdown(f'<div class="pro-tip">💼 {h["pro_tip"]}</div>',
                         unsafe_allow_html=True)
+    # ↑ for loop ends here — notice the dedent below
 
+    # ── Button section ───────────────────────────────────────────────────
     st.divider()
-    if st.button("🔄  Retake Quiz", type="primary", use_container_width=True):
-        reset_quiz()
-        st.rerun()
+
+    weak = stats["weak_topics"]
+
+    if weak:
+        st.markdown("### 🎯 Ready to improve?")
+        weak_list = ", ".join(weak)
+        st.markdown(
+            f'<div class="wrong-box">📉 You scored below 60% in: '
+            f'<b>{weak_list}</b><br><br>'
+            f'The re-quiz below will focus <b>only</b> on these topics '
+            f'across all difficulty levels.</div>',
+            unsafe_allow_html=True
+        )
+        st.markdown("")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔁  Practice Weak Topics",
+                         type="primary",
+                         use_container_width=True,
+                         key="btn_weak_requiz"):
+                start_weak_topics_requiz()
+                st.rerun()
+        with col2:
+            if st.button("🔄  Retake Full Quiz",
+                         use_container_width=True,
+                         key="btn_retake_full"):
+                reset_quiz()
+                st.rerun()
+
+    else:
+        st.success("🏆 Great job! You scored above 60% in all topics.")
+        if st.button("🔄  Retake Quiz",
+                     type="primary",
+                     use_container_width=True,
+                     key="btn_retake_clean"):
+            reset_quiz()
+            st.rerun()
 
 
 # ════════════════════════════════════════════════════════════════════════
