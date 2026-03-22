@@ -20,12 +20,17 @@ def init_session():
         st.session_state.total_score = 0
         st.session_state.history = []
         st.session_state.topic_scores = {}
-        st.session_state.phase = "welcome"
+        st.session_state.phase = "login"
         st.session_state.last_result = None
         st.session_state.answer_submitted = False
         #timer keys
         st.session_state.question_start_time = None
         st.session_state.time_expired = False
+        #New keys for user management (not fully implemented yet)
+        st.session_state.user_id = None
+        st.session_state.username = None
+        st.session_state.attempt_saved = False
+
 
 def apply_filters():
     """
@@ -174,6 +179,12 @@ def get_final_stats() -> dict:
 
 
 def reset_quiz():
-    """Wipe session and restart."""
+    """Wipe quiz state but keep the user logged in."""
+    keep_user_id = st.session_state.get("user_id")
+    keep_username = st.session_state.get("username")
     for key in list(st.session_state.keys()):
         del st.session_state[key]
+    # re-apply login info so user doesn't have to log in again
+    st.session_state.user_id = keep_user_id
+    st.session_state.username = keep_username
+    st.session_state.attempt_saved = False

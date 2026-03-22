@@ -15,6 +15,15 @@ from session_manager import (
 
 from question_bank import TOPICS, DIFFICULTIES
 
+from database import (
+    init_db, get_or_create_user, save_attempt,
+    get_user_history, get_historical_weak_topics,
+    delete_user_data
+)
+
+init_db()   # creates tables on first run, no-op after that
+
+
 QUESTION_TIME_LIMIT = 30   # seconds per question
 
 # ── PAGE CONFIG ──────────────────────────────────────────────────────────
@@ -128,12 +137,44 @@ st.markdown("""
 # ── INITIALIZE SESSION ───────────────────────────────────────────────────
 init_session()
 
+# ════════════════════════════════════════════════════════════════════════
+# the login screen function
+# ════════════════════════════════════════════════════════════════════════
+
+
+def show_login():
+    st.markdown("## 🏠 RealEstate IQ Bot")
+    st.markdown("##### *AI-powered Property Listings Assessment*")
+    st.divider()
+    st.markdown("### 👤 Enter your name to begin")
+    st.markdown("Your quiz history will be saved so you can "
+                "track your progress over time.")
+
+    username = st.text_input(
+        "Username",
+        placeholder="e.g. Deeksha",
+        max_chars=30,
+        key="login_username_input"
+    )
+
+    if st.button("▶️  Continue", type="primary",
+                 use_container_width=True,
+                 disabled=(username.strip() == ""),
+                 key="btn_login"):
+        clean_name = username.strip()
+        user_id = get_or_create_user(clean_name)
+        st.session_state.user_id = user_id
+        st.session_state.username = clean_name
+        st.session_state.phase = "welcome"
+        st.rerun()
+
 
 # ════════════════════════════════════════════════════════════════════════
 # WELCOME SCREEN
 # ════════════════════════════════════════════════════════════════════════
 def show_welcome():
-    st.markdown("## 🏠 RealEstate IQ Bot")
+    name = st.session_state.get("username", "")
+    st.markdown(f"## 🏠 Welcome back, {name}!" if name else "## 🏠 RealEstate IQ Bot")
     st.markdown("##### *AI-powered Property Listings Assessment*")
     st.divider()
 
@@ -383,6 +424,17 @@ def show_summary():
     stats = get_final_stats()
     accuracy = stats["accuracy"]
 
+    # ── Save to DB once per attempt ──────────────────────────────────────
+    if (st.session_state.get("user_id")
+            and not st.session_state.get("attempt_saved", False)):
+        save_attempt(
+            user_id=st.session_state.user_id,
+            stats=stats,
+            selected_topics=st.session_state.selected_topics,
+            selected_difficulties=st.session_state.selected_difficulties,
+        )
+        st.session_state.attempt_saved = True
+
     # ── Grade ────────────────────────────────────────────────────────────
     if accuracy >= 90:
         grade, emoji, color = "A", "🏆", "#059669"
@@ -440,8 +492,24 @@ def show_summary():
             )
             st.markdown(f'<div class="pro-tip">💼 {h["pro_tip"]}</div>',
                         unsafe_allow_html=True)
-    # ↑ for loop ends here — notice the dedent below
 
+    # ── Past Attempts History ────────────────────────────────────────────
+    user_id = st.session_state.get("user_id")
+    if user_id:
+        history = get_user_history(user_id)
+        if len(history) > 1:   # only show if more than current attempt
+            st.markdown("### 📈 Your Progress Over Time")
+            for i, attempt in enumerate(history):
+                attempt_label = (
+                    f"Attempt {len(history) - i} — "
+                    f"{attempt['attempted_at'][:16].replace('T', ' ')} — "
+                    f"Accuracy: {attempt['accuracy']:.1f}% "
+                    f"({attempt['correct_count']}/{attempt['total_questions']})"
+                )
+                st.write(attempt_label)
+
+    # ↑ for loop ends here — notice the dedent below
+    
     # ── Button section ───────────────────────────────────────────────────
     st.divider()
 
@@ -487,12 +555,14 @@ def show_summary():
 # ════════════════════════════════════════════════════════════════════════
 # ROUTER — pick screen based on phase
 # ════════════════════════════════════════════════════════════════════════
-phase = st.session_state.get("phase", "welcome")
+phase = st.session_state.get("phase", "login")   # default is now "login"
 
-if phase == "welcome":
+if phase == "login":
+    show_login()
+elif phase == "welcome":
     show_welcome()
-elif phase == "filter":          
-    show_filter()                
+elif phase == "filter":
+    show_filter()
 elif phase in ("quiz", "result"):
     show_quiz()
 elif phase == "summary":
