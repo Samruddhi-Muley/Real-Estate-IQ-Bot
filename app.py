@@ -4,7 +4,9 @@
 # Run with:  streamlit run app.py
 # ------------------------------------------------
 
-import streamlit as st  
+import streamlit as st
+from pdf_generator import generate_pdf
+from datetime import datetime
 from evaluator import evaluate_answer
 
 from session_manager import (
@@ -511,6 +513,21 @@ def show_summary():
     # ↑ for loop ends here — notice the dedent below
     
     # ── Button section ───────────────────────────────────────────────────
+
+    # ── PDF Download ─────────────────────────────────────────────────────
+    username = st.session_state.get("username", "User")
+    pdf_bytes = generate_pdf(username, stats)
+    filename = f"RealEstate_IQ_{username}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+
+    st.download_button(
+        label="📄  Download My Report (PDF)",
+        data=pdf_bytes,
+        file_name=filename,
+        mime="application/pdf",
+        use_container_width=True,
+        key="btn_download_pdf"
+    )
+
     st.divider()
 
     weak = stats["weak_topics"]
