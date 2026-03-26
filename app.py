@@ -18,11 +18,10 @@ from session_manager import (
 from question_bank import TOPICS, DIFFICULTIES
 
 from database import (
-    init_db, get_or_create_user, save_attempt,
+    init_db, register_user, login_user, save_attempt,
     get_user_history, get_historical_weak_topics,
     delete_user_data
 )
-
 init_db()   # creates tables on first run, no-op after that
 
 
@@ -148,27 +147,79 @@ def show_login():
     st.markdown("## 🏠 RealEstate IQ Bot")
     st.markdown("##### *AI-powered Property Listings Assessment*")
     st.divider()
-    st.markdown("### 👤 Enter your name to begin")
-    st.markdown("Your quiz history will be saved so you can "
-                "track your progress over time.")
 
-    username = st.text_input(
-        "Username",
-        placeholder="e.g. Deeksha",
-        max_chars=30,
-        key="login_username_input"
-    )
+    # Tab switcher — Login vs Register
+    tab1, tab2 = st.tabs(["🔑  Login", "📝  Register"])
 
-    if st.button("▶️  Continue", type="primary",
-                 use_container_width=True,
-                 disabled=(username.strip() == ""),
-                 key="btn_login"):
-        clean_name = username.strip()
-        user_id = get_or_create_user(clean_name)
-        st.session_state.user_id = user_id
-        st.session_state.username = clean_name
-        st.session_state.phase = "welcome"
-        st.rerun()
+    # ── LOGIN TAB ────────────────────────────────────────────────────────
+    with tab1:
+        st.markdown("#### Welcome back")
+        login_user_input = st.text_input(
+            "Username", key="login_username",
+            placeholder="Enter your username"
+        )
+        login_pass_input = st.text_input(
+            "Password", type="password",
+            key="login_password",
+            placeholder="Enter your password"
+        )
+
+        if st.button("🔑  Login", type="primary",
+                     use_container_width=True,
+                     key="btn_login"):
+            if not login_user_input.strip() or not login_pass_input:
+                st.error("Please enter both username and password.")
+            else:
+                result = login_user(login_user_input, login_pass_input)
+                if result["success"]:
+                    st.session_state.user_id = result["user_id"]
+                    st.session_state.username = result["username"]
+                    st.session_state.phase = "welcome"
+                    st.rerun()
+                else:
+                    st.error(f"❌ {result['error']}")
+
+    # ── REGISTER TAB ─────────────────────────────────────────────────────
+    with tab2:
+        st.markdown("#### Create a new account")
+        st.markdown("Your quiz history will be saved so you can "
+                    "track your progress over time.")
+
+        reg_username = st.text_input(
+            "Choose a username", key="reg_username",
+            placeholder="e.g. Sam",
+            max_chars=30
+        )
+        reg_pass = st.text_input(
+            "Choose a password", type="password",
+            key="reg_password",
+            placeholder="Min. 4 characters"
+        )
+        reg_pass_confirm = st.text_input(
+            "Confirm password", type="password",
+            key="reg_password_confirm",
+            placeholder="Repeat your password"
+        )
+
+        if st.button("📝  Create Account", type="primary",
+                     use_container_width=True,
+                     key="btn_register"):
+            if not reg_username.strip():
+                st.error("Please enter a username.")
+            elif len(reg_pass) < 4:
+                st.error("Password must be at least 4 characters.")
+            elif reg_pass != reg_pass_confirm:
+                st.error("Passwords do not match.")
+            else:
+                result = register_user(reg_username, reg_pass)
+                if result["success"]:
+                    st.session_state.user_id = result["user_id"]
+                    st.session_state.username = reg_username.strip()
+                    st.session_state.phase = "welcome"
+                    st.success("✅ Account created! Redirecting...")
+                    st.rerun()
+                else:
+                    st.error(f"❌ {result['error']}")
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -176,8 +227,21 @@ def show_login():
 # ════════════════════════════════════════════════════════════════════════
 def show_welcome():
     name = st.session_state.get("username", "")
-    st.markdown(f"## 🏠 Welcome back, {name}!" if name else "## 🏠 RealEstate IQ Bot")
-    st.markdown("##### *AI-powered Property Listings Assessment*")
+    # ── Logout button top right ───────────────────────────────────────────
+    col_title, col_logout = st.columns([5, 1])
+    with col_title:
+        st.markdown(f"## 🏠 Welcome back, {name}!" if name
+                    else "## 🏠 RealEstate IQ Bot")
+        st.markdown("##### *AI-powered Property Listings Assessment*")
+    with col_logout:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🚪 Logout", key="btn_logout",
+                     use_container_width=True):
+            st.session_state.pop("user_id", None)
+            st.session_state.pop("username", None)
+            st.session_state.phase = "login"
+            st.rerun()
+
     st.divider()
 
     col1, col2, col3 = st.columns(3)
@@ -200,6 +264,18 @@ def show_welcome():
 
     st.divider()
     if st.button("🚀  Start Quiz", type="primary", use_container_width=True):
+        st.session_state.phase = "filter"
+        st.rerun()
+    if st.button("📈  View My History",
+                 use_container_width=True,
+                 key="btn_view_history"):
+        st.session_state.phase = "history"
+        st.rerun()
+
+    st.divider()
+    if st.button("🚀  Start Quiz", type="primary",
+                 use_container_width=True,
+                 key="btn_start_quiz"):
         st.session_state.phase = "filter"
         st.rerun()
 
@@ -568,6 +644,64 @@ def show_summary():
             reset_quiz()
             st.rerun()
 
+def show_history():
+    username = st.session_state.get("username", "User")
+    user_id  = st.session_state.get("user_id")
+
+    st.markdown(f"### 📈 {username}'s Quiz History")
+    st.divider()
+
+    history = get_user_history(user_id)
+
+    if not history:
+        st.info("You haven't completed any quizzes yet. "
+                "Take your first quiz to see your history here!")
+    else:
+        # Summary stats across all attempts
+        all_accuracies = [h["accuracy"] for h in history]
+        best  = max(all_accuracies)
+        avg   = sum(all_accuracies) / len(all_accuracies)
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("🗂️ Total Attempts", len(history))
+        col2.metric("🏆 Best Accuracy",  f"{best:.1f}%")
+        col3.metric("📊 Average Accuracy", f"{avg:.1f}%")
+
+        st.markdown("### All Attempts")
+        for i, attempt in enumerate(history):
+            date_str = attempt["attempted_at"][:16].replace("T", " ")
+            label = (
+                f"Attempt {len(history) - i} — {date_str} — "
+                f"{attempt['accuracy']:.1f}% "
+                f"({attempt['correct_count']}/{attempt['total_questions']})"
+            )
+            st.write(f"**{label}**")
+            st.progress(attempt["accuracy"] / 100)
+
+    st.divider()
+
+    # ── Delete data option ────────────────────────────────────────────────
+    with st.expander("⚠️ Danger Zone"):
+        st.warning("Deleting your data is permanent and cannot be undone.")
+        confirm = st.text_input(
+            f"Type your username **{username}** to confirm deletion:",
+            key="delete_confirm_input"
+        )
+        if st.button("🗑️ Delete All My Data",
+                     type="primary",
+                     key="btn_delete_data"):
+            if confirm == username:
+                delete_user_data(user_id)
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
+                st.success("All your data has been deleted.")
+                st.rerun()
+            else:
+                st.error("Username does not match. Deletion cancelled.")
+
+    if st.button("← Back", key="btn_history_back"):
+        st.session_state.phase = "welcome"
+        st.rerun()
 
 # ════════════════════════════════════════════════════════════════════════
 # ROUTER — pick screen based on phase
@@ -584,3 +718,5 @@ elif phase in ("quiz", "result"):
     show_quiz()
 elif phase == "summary":
     show_summary()
+elif phase == "history":
+    show_history()

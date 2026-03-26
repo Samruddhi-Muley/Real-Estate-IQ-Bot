@@ -5,11 +5,13 @@
 # fetching history, user management.
 # ------------------------------------------------
 
+import hashlib
 import sqlite3
 import json
 import os
 
-DB_PATH = "real_estate_bot.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "real_estate_bot.db")
 
 
 def get_connection():
@@ -29,9 +31,10 @@ def init_db():
     with get_connection() as conn:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS users (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                username   TEXT UNIQUE NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                username      TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL DEFAULT '',
+                created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
             );
 
             CREATE TABLE IF NOT EXISTS quiz_attempts (
@@ -61,23 +64,75 @@ def init_db():
             );
         """)
 
-
-def get_or_create_user(username: str) -> int:
+def _hash_password(password: str) -> str:
     """
-    Returns user_id for the given username.
-    Creates a new user if username doesn't exist yet.
+    One-way SHA-256 hash of the password.
+    We never store the plain text — only the hash.
+    """
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def register_user(username: str, password: str) -> dict:
+    """
+    Creates a new user account.
+    Returns: {"success": True, "user_id": int}
+          or {"success": False, "error": "message"}
+    """
+    username = username.strip()
+    if len(username) < 2:
+        return {"success": False,
+                "error": "Username must be at least 2 characters."}
+    if len(password) < 4:
+        return {"success": False,
+                "error": "Password must be at least 4 characters."}
+
+    try:
+        with get_connection() as conn:
+            cursor = conn.execute(
+                "INSERT INTO users (username, password_hash) VALUES (?,?)",
+                (username, _hash_password(password))
+            )
+            return {"success": True, "user_id": cursor.lastrowid}
+    except sqlite3.IntegrityError:
+        return {"success": False,
+                "error": f"Username '{username}' is already taken. "
+                          f"Please choose another."}
+
+
+def login_user(username: str, password: str) -> dict:
+    """
+    Validates credentials.
+    Returns: {"success": True, "user_id": int, "username": str}
+          or {"success": False, "error": "message"}
     """
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT id FROM users WHERE username = ?", (username,)
+            "SELECT id, username, password_hash FROM users WHERE username=?",
+            (username.strip(),)
         ).fetchone()
-        if row:
-            return row["id"]
-        cursor = conn.execute(
-            "INSERT INTO users (username) VALUES (?)", (username,)
-        )
-        return cursor.lastrowid
 
+    if not row:
+        return {"success": False,
+                "error": "Username not found. Please register first."}
+
+    if row["password_hash"] != _hash_password(password):
+        return {"success": False,
+                "error": "Incorrect password. Please try again."}
+
+    return {"success": True,
+            "user_id": row["id"],
+            "username": row["username"]}
+
+
+def get_all_users() -> list:
+    """
+    Returns list of all users — useful for an
+    admin view if you add one later.
+    """
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, username, created_at FROM users ORDER BY created_at DESC"
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 def save_attempt(user_id: int, stats: dict, selected_topics: list,
                  selected_difficulties: list):
